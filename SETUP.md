@@ -10,10 +10,12 @@ This comprehensive guide covers everything you need to know about running, build
 4. [Building Docker Images from Source](#building-docker-images-from-source)
 5. [Running in Docker Container](#running-in-docker-container)
 6. [Docker Compose Setup](#docker-compose-setup)
-7. [Configuration Guide](#configuration-guide)
-8. [Testing](#testing)
-9. [Pros and Cons](#pros-and-cons)
-10. [Troubleshooting](#troubleshooting)
+7. [Production Deployment Guide](#production-deployment-guide)
+8. [Storage Backend Selection](#storage-backend-selection)
+9. [Configuration Guide](#configuration-guide)
+10. [Testing](#testing)
+11. [Pros and Cons](#pros-and-cons)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -743,6 +745,759 @@ docker-compose exec stalwart /bin/bash
 5. **Enable logging**: Configure logging drivers for log management
 6. **Network isolation**: Use custom networks to isolate services
 7. **Volume backups**: Regularly backup named volumes
+
+---
+
+## Production Deployment Guide
+
+This section provides a comprehensive guide for deploying Stalwart in production using Docker, including security hardening, monitoring, backups, and high availability considerations.
+
+### Production Deployment Overview
+
+Running Stalwart in production requires careful planning and configuration. This guide covers:
+
+- **Single-server deployment**: For small to medium organizations
+- **Multi-service architecture**: Using external databases and object storage
+- **Security hardening**: TLS, firewalls, and access control
+- **Monitoring and logging**: Health checks and observability
+- **Backup and disaster recovery**: Data protection strategies
+- **Performance tuning**: Resource optimization
+
+### Option 1: Single-Server Production Deployment (RocksDB)
+
+This is the **recommended approach for most small to medium deployments** (up to 10,000 users). It uses RocksDB for all storage, which provides excellent performance with minimal operational complexity.
+
+#### Why RocksDB for Production?
+
+**RocksDB is the default and recommended storage backend** for several reasons:
+
+1. **Embedded Database**: No separate database server to manage
+2. **High Performance**: Optimized for SSDs, handles millions of operations per second
+3. **Low Latency**: Direct file access, no network overhead
+4. **Automatic Optimization**: Self-tuning compaction and memory management
+5. **ACID Compliant**: Full transactional support with durability guarantees
+6. **Battle-Tested**: Used by Facebook, LinkedIn, and many large-scale systems
+7. **Resource Efficient**: Lower memory footprint compared to PostgreSQL/MySQL
+8. **Simpler Operations**: No database migrations, connection pools, or query tuning
+9. **Built-in Compression**: LZ4 compression reduces disk space by 50-70%
+10. **Snapshot Backups**: Fast, consistent backups without downtime
+
+**When NOT to use RocksDB:**
+- You need to share data with other applications
+- You require SQL access to mail data
+- You're running on NFS/network storage (use PostgreSQL instead)
+- You need multi-region replication (use PostgreSQL + cloud storage)
+
+#### Step-by-Step Production Deployment with RocksDB
+
+**1. Prepare the Server**
+
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Install Docker Compose
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+  -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Create directory structure
+sudo mkdir -p /opt/stalwart
+cd /opt/stalwart
+```
+
+**2. Clone and Configure**
+
+```bash
+# Clone repository
+git clone https://github.com/stalwartlabs/stalwart.git
+cd stalwart
+
+# Create production environment file
+cat > .env << 'EOF'
+# Generate secure password: openssl rand -base64 32
+ADMIN_SECRET=YOUR_SECURE_PASSWORD_HERE
+TZ=America/New_York
+EOF
+
+# Secure the environment file
+chmod 600 .env
+```
+
+**3. Create Production Docker Compose File**
+
+Create `docker-compose.production.yml`:
+
+```yaml
+# Production Stalwart with RocksDB
+services:
+  stalwart:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stalwart:production
+    container_name: stalwart-production
+    hostname: mail.yourdomain.com
+    restart: always
+    
+    ports:
+      - "25:25"      # SMTP
+      - "587:587"    # Submission
+      - "465:465"    # Submissions (TLS)
+      - "143:143"    # IMAP
+      - "993:993"    # IMAPS
+      - "4190:4190"  # ManageSieve
+      - "443:443"    # HTTPS Admin
+    
+    volumes:
+      # Data persistence
+      - stalwart-data:/opt/stalwart/data
+      - stalwart-logs:/opt/stalwart/logs
+      - stalwart-config:/opt/stalwart/etc
+      
+      # TLS certificates (Let's Encrypt)
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    
+    environment:
+      - ADMIN_SECRET=${ADMIN_SECRET:?ADMIN_SECRET required}
+      - STALWART_PATH=/opt/stalwart
+      - TZ=${TZ:-UTC}
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    networks:
+      - stalwart-net
+    
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '4'
+        reservations:
+          memory: 2G
+          cpus: '2'
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # User namespace remapping for security
+    # Uncomment if you've configured user namespaces
+    # userns_mode: "host"
+
+networks:
+  stalwart-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  stalwart-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/stalwart/data
+  stalwart-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/stalwart/logs
+  stalwart-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/stalwart/config
+```
+
+**4. Build and Deploy**
+
+```bash
+# Build the production image
+docker compose -f docker-compose.production.yml build
+
+# Start the service
+docker compose -f docker-compose.production.yml up -d
+
+# View logs
+docker compose -f docker-compose.production.yml logs -f
+
+# Check status
+docker compose -f docker-compose.production.yml ps
+```
+
+**5. Configure TLS/SSL Certificates**
+
+```bash
+# Install Certbot
+sudo apt install certbot
+
+# Obtain certificate (HTTP-01 challenge)
+sudo certbot certonly --standalone -d mail.yourdomain.com
+
+# Or use DNS challenge for wildcard certs
+sudo certbot certonly --manual --preferred-challenges dns \
+  -d mail.yourdomain.com -d "*.yourdomain.com"
+
+# Certificates will be in /etc/letsencrypt/live/mail.yourdomain.com/
+
+# Configure automatic renewal
+sudo crontab -e
+# Add: 0 3 * * * certbot renew --quiet && docker compose -f /opt/stalwart/stalwart/docker-compose.production.yml restart
+```
+
+**6. Configure Firewall**
+
+```bash
+# UFW firewall setup
+sudo ufw allow 25/tcp    # SMTP
+sudo ufw allow 587/tcp   # Submission
+sudo ufw allow 465/tcp   # Submissions
+sudo ufw allow 143/tcp   # IMAP
+sudo ufw allow 993/tcp   # IMAPS
+sudo ufw allow 4190/tcp  # ManageSieve
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw allow 22/tcp    # SSH (if not already)
+sudo ufw enable
+```
+
+**7. Configure DNS Records**
+
+Add these DNS records for your domain:
+
+```dns
+# A Records
+mail.yourdomain.com.        A       YOUR_SERVER_IP
+yourdomain.com.             A       YOUR_SERVER_IP
+
+# MX Record
+yourdomain.com.             MX 10   mail.yourdomain.com.
+
+# SPF Record
+yourdomain.com.             TXT     "v=spf1 mx ~all"
+
+# DKIM Record (generate in Stalwart admin panel first)
+default._domainkey.yourdomain.com. TXT "v=DKIM1; k=rsa; p=YOUR_PUBLIC_KEY"
+
+# DMARC Record
+_dmarc.yourdomain.com.      TXT     "v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com"
+
+# Autodiscover (optional)
+autoconfig.yourdomain.com.  CNAME   mail.yourdomain.com.
+autodiscover.yourdomain.com. CNAME  mail.yourdomain.com.
+```
+
+**8. Initial Configuration**
+
+```bash
+# Access the admin interface
+# https://mail.yourdomain.com (or https://YOUR_SERVER_IP)
+
+# Login with: admin / YOUR_ADMIN_SECRET
+
+# Complete setup wizard:
+# 1. Configure your domain
+# 2. Set up DKIM signing
+# 3. Create email accounts
+# 4. Configure spam filter settings
+# 5. Set up relay rules (if needed)
+```
+
+**9. Backup Configuration**
+
+```bash
+# Create backup script
+sudo nano /opt/stalwart/backup.sh
+```
+
+Add the following:
+
+```bash
+#!/bin/bash
+# Stalwart Backup Script
+
+BACKUP_DIR="/opt/stalwart/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="stalwart-backup-${DATE}.tar.gz"
+
+# Create backup directory
+mkdir -p "$BACKUP_DIR"
+
+# Stop writes (optional, for consistent backup)
+# docker compose -f /opt/stalwart/stalwart/docker-compose.production.yml exec stalwart stalwart-cli database freeze
+
+# Backup data directory
+tar -czf "${BACKUP_DIR}/${BACKUP_FILE}" \
+  -C /opt/stalwart data/ config/ logs/
+
+# Resume writes
+# docker compose -f /opt/stalwart/stalwart/docker-compose.production.yml exec stalwart stalwart-cli database unfreeze
+
+# Keep only last 7 days
+find "$BACKUP_DIR" -name "stalwart-backup-*.tar.gz" -mtime +7 -delete
+
+echo "Backup completed: ${BACKUP_FILE}"
+```
+
+Make it executable and add to cron:
+
+```bash
+chmod +x /opt/stalwart/backup.sh
+
+# Add to crontab (daily at 2 AM)
+sudo crontab -e
+# Add: 0 2 * * * /opt/stalwart/backup.sh
+```
+
+**10. Monitoring Setup**
+
+Create health check script:
+
+```bash
+# Monitor script
+sudo nano /opt/stalwart/monitor.sh
+```
+
+```bash
+#!/bin/bash
+# Stalwart Health Monitor
+
+HEALTH_URL="http://localhost:8080/health"
+ALERT_EMAIL="admin@yourdomain.com"
+
+if ! curl -sf "$HEALTH_URL" > /dev/null; then
+  echo "Stalwart health check failed!" | mail -s "Stalwart Alert" "$ALERT_EMAIL"
+  # Optional: restart service
+  # docker compose -f /opt/stalwart/stalwart/docker-compose.production.yml restart
+fi
+```
+
+**11. Log Rotation**
+
+Docker handles JSON logs, but configure system logs:
+
+```bash
+sudo nano /etc/logrotate.d/stalwart
+```
+
+```
+/opt/stalwart/logs/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 root root
+    sharedscripts
+    postrotate
+        docker kill -s USR1 stalwart-production > /dev/null 2>&1 || true
+    endscript
+}
+```
+
+### Option 2: High-Availability Production with PostgreSQL
+
+For larger deployments (10,000+ users) or when you need:
+- Database replication
+- Multi-region support
+- SQL access to data
+- Shared storage across multiple servers
+
+Use the advanced setup with PostgreSQL, Redis, and S3:
+
+```bash
+# Use the advanced compose file
+docker compose -f docker-compose.advanced.yml up -d
+
+# Configure PostgreSQL replication (see PostgreSQL docs)
+# Configure Redis Sentinel for HA (see Redis docs)
+# Use cloud S3 (AWS, GCS, Azure) for blob storage
+```
+
+See the [docker-compose.advanced.yml](./docker-compose.advanced.yml) for full configuration.
+
+### Production Checklist
+
+Before going live, verify:
+
+- [ ] **DNS records** configured (MX, SPF, DKIM, DMARC)
+- [ ] **TLS certificates** installed and auto-renewing
+- [ ] **Firewall** configured (only necessary ports open)
+- [ ] **Strong passwords** set (not defaults)
+- [ ] **Backups** configured and tested
+- [ ] **Monitoring** in place
+- [ ] **Resource limits** set appropriately
+- [ ] **Log rotation** configured
+- [ ] **Reverse DNS (PTR)** record set up
+- [ ] **Port 25 unblocked** by your hosting provider
+- [ ] **SMTP relay** configured (if needed)
+- [ ] **Rate limiting** enabled
+- [ ] **Spam filter** tuned
+- [ ] **Admin account** secured with 2FA
+- [ ] **Regular updates** scheduled
+
+### Maintenance Tasks
+
+**Daily:**
+- Monitor logs for errors: `docker logs stalwart-production --since 24h`
+- Check disk space: `df -h /opt/stalwart`
+
+**Weekly:**
+- Review spam filter performance
+- Check queue status
+- Verify backups completed successfully
+
+**Monthly:**
+- Update Docker images: `docker compose pull && docker compose up -d`
+- Review and rotate logs
+- Test backup restoration
+- Review security logs
+
+**Quarterly:**
+- Update system packages
+- Review and update firewall rules
+- Test disaster recovery procedures
+- Audit user accounts and permissions
+
+### Performance Tuning
+
+**For RocksDB:**
+
+```toml
+# In config.toml
+[store."rocksdb"]
+type = "rocksdb"
+path = "/opt/stalwart/data"
+compression = "lz4"  # or "zstd" for better compression
+
+# Adjust based on available RAM
+cache.size = "2GB"   # Increase for better performance
+
+# For high-write workloads
+optimize.writes = true
+```
+
+**For Docker:**
+
+```bash
+# Increase container resources if needed
+docker compose -f docker-compose.production.yml up -d \
+  --scale stalwart=1 \
+  --memory=8g \
+  --cpus=6
+```
+
+### Disaster Recovery
+
+**Backup Strategy:**
+
+1. **Daily automated backups** of /opt/stalwart/data
+2. **Configuration backups** stored separately
+3. **Off-site backup** copies (S3, rsync to remote server)
+4. **Test restoration** quarterly
+
+**Recovery Procedure:**
+
+```bash
+# 1. Stop service
+docker compose -f docker-compose.production.yml down
+
+# 2. Restore data
+cd /opt/stalwart
+tar -xzf backups/stalwart-backup-YYYYMMDD_HHMMSS.tar.gz
+
+# 3. Restart service
+docker compose -f docker-compose.production.yml up -d
+
+# 4. Verify
+docker logs -f stalwart-production
+curl http://localhost:8080/health
+```
+
+### Security Hardening
+
+**1. Enable Fail2ban:**
+
+```bash
+sudo apt install fail2ban
+
+# Create Stalwart filter
+sudo nano /etc/fail2ban/filter.d/stalwart.conf
+```
+
+```ini
+[Definition]
+failregex = Failed login attempt.*from=<HOST>
+ignoreregex =
+```
+
+```bash
+# Configure jail
+sudo nano /etc/fail2ban/jail.local
+```
+
+```ini
+[stalwart]
+enabled = true
+port = smtp,submission,imap,imaps
+filter = stalwart
+logpath = /opt/stalwart/logs/*.log
+maxretry = 5
+bantime = 3600
+```
+
+**2. Configure Rate Limiting:**
+
+In Stalwart admin panel:
+- Set connection rate limits
+- Configure authentication rate limits
+- Enable SMTP rate limiting
+
+**3. Regular Security Updates:**
+
+```bash
+# Create update script
+sudo nano /opt/stalwart/update.sh
+```
+
+```bash
+#!/bin/bash
+cd /opt/stalwart/stalwart
+git pull
+docker compose -f docker-compose.production.yml build
+docker compose -f docker-compose.production.yml up -d
+docker image prune -f
+```
+
+---
+
+## Storage Backend Selection
+
+Choosing the right storage backend is crucial for your deployment. This section provides detailed guidance on when to use each option.
+
+### Storage Backend Comparison
+
+| Feature | RocksDB | PostgreSQL | MySQL | SQLite | S3/MinIO |
+|---------|---------|------------|-------|--------|----------|
+| **Deployment Complexity** | ⭐⭐⭐⭐⭐ Lowest | ⭐⭐⭐ Medium | ⭐⭐⭐ Medium | ⭐⭐⭐⭐⭐ Lowest | ⭐⭐⭐⭐ Low |
+| **Performance** | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐⭐⭐ Good | ⭐⭐⭐ Good | ⭐⭐⭐ Good | ⭐⭐⭐⭐ Good |
+| **Scalability** | ⭐⭐⭐⭐ Good | ⭐⭐⭐⭐⭐ Excellent | ⭐⭐⭐⭐ Good | ⭐⭐ Limited | ⭐⭐⭐⭐⭐ Excellent |
+| **Operational Overhead** | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐ High | ⭐⭐ High | ⭐⭐⭐⭐⭐ Minimal | ⭐⭐⭐⭐ Low |
+| **Backup/Restore** | ⭐⭐⭐⭐⭐ Simple | ⭐⭐⭐⭐ Good | ⭐⭐⭐⭐ Good | ⭐⭐⭐⭐⭐ Simple | ⭐⭐⭐⭐⭐ Excellent |
+| **Multi-Server** | ❌ No | ✅ Yes | ✅ Yes | ❌ No | ✅ Yes |
+| **SQL Access** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |
+| **Network Storage** | ⚠️ Not Recommended | ✅ Yes | ✅ Yes | ⚠️ Not Recommended | ✅ Yes |
+| **Best For** | Single server | Multi-server | Budget conscious | Testing/Dev | Large files |
+
+### Detailed Backend Analysis
+
+#### RocksDB (Recommended for Most Deployments)
+
+**What it is:** High-performance embedded key-value store developed by Facebook, based on LevelDB.
+
+**Best for:**
+- Single-server deployments (up to 10,000+ users)
+- Deployments where simplicity is valued
+- When you want the best performance
+- Small to medium organizations
+- When you have fast local SSDs
+
+**Pros:**
+- ✅ **Zero configuration** - Just works out of the box
+- ✅ **Excellent performance** - Millions of ops/sec on SSDs
+- ✅ **Low latency** - Direct file access, no network overhead
+- ✅ **Self-tuning** - Automatic compaction and optimization
+- ✅ **Resource efficient** - Lower memory usage than databases
+- ✅ **Simple backups** - Just copy the data directory
+- ✅ **Battle-tested** - Powers Facebook, LinkedIn, Netflix
+- ✅ **ACID compliant** - Full transactional guarantees
+- ✅ **Built-in compression** - LZ4/Zstd reduce storage 50-70%
+
+**Cons:**
+- ❌ No built-in replication (use filesystem replication if needed)
+- ❌ Not suitable for shared/network storage
+- ❌ Cannot query data with SQL
+- ❌ Single-server only (no horizontal scaling)
+
+**Configuration Example:**
+
+```toml
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+
+[store."rocksdb"]
+type = "rocksdb"
+path = "/opt/stalwart/data"
+compression = "lz4"        # or "zstd" for better compression
+cache.size = "2GB"         # Adjust based on RAM
+
+# Optional optimizations
+optimize.writes = true     # For write-heavy workloads
+optimize.reads = true      # For read-heavy workloads
+```
+
+**When to choose RocksDB:**
+- 👍 You're running on a single server
+- 👍 You have SSDs (not HDDs or network storage)
+- 👍 You want minimal operational complexity
+- 👍 You prioritize performance
+- 👍 User count < 10,000
+
+#### PostgreSQL (Best for Enterprise/Multi-Server)
+
+**What it is:** World's most advanced open-source relational database.
+
+**Best for:**
+- Multi-server deployments
+- When you need replication and high availability
+- Large organizations (10,000+ users)
+- When you need SQL access to mail data
+- Multi-region deployments
+
+**Pros:**
+- ✅ **Horizontal scaling** - Read replicas, sharding
+- ✅ **High availability** - Built-in replication
+- ✅ **SQL access** - Query mail data directly
+- ✅ **Mature ecosystem** - Extensive tooling
+- ✅ **Network storage** - Works well on NFS/SAN
+- ✅ **Shared storage** - Multiple Stalwart instances
+- ✅ **Point-in-time recovery** - Advanced backup options
+- ✅ **Multi-region** - Geographic replication
+
+**Cons:**
+- ❌ Higher operational complexity
+- ❌ Requires separate database server
+- ❌ More memory usage
+- ❌ Network latency overhead
+- ❌ Needs tuning for optimal performance
+
+**When to choose PostgreSQL:**
+- 👍 You need multi-server deployment
+- 👍 You want high availability/replication
+- 👍 User count > 10,000
+- 👍 You need SQL access to data
+- 👍 You're using network storage (NFS/SAN)
+- 👍 You need multi-region support
+
+#### MySQL/MariaDB (Alternative to PostgreSQL)
+
+**Best for:**
+- Teams already familiar with MySQL
+- When you need replication
+- Budget-conscious deployments (lower resource usage than PostgreSQL)
+
+**Pros:**
+- ✅ Lower resource usage than PostgreSQL
+- ✅ Simpler replication setup
+- ✅ Large ecosystem and community
+- ✅ Good performance for read-heavy workloads
+
+**Cons:**
+- ❌ Less advanced features than PostgreSQL
+- ❌ Slower for complex queries
+- ❌ Less robust full-text search
+
+**When to choose MySQL:**
+- 👍 Your team knows MySQL better than PostgreSQL
+- 👍 You're on a tighter resource budget
+- 👍 You need basic replication
+
+#### S3/MinIO (For Blob Storage)
+
+**Best for:**
+- Storing email attachments and blobs
+- When combined with PostgreSQL or MySQL for metadata
+- Multi-server deployments
+
+**Pros:**
+- ✅ Unlimited scalability
+- ✅ Cost-effective for large files
+- ✅ Geographic replication
+- ✅ Separate blob storage from database
+
+**Cons:**
+- ❌ Higher latency than local storage
+- ❌ Requires separate service
+
+**When to choose S3:**
+- 👍 Large attachment volumes
+- 👍 Multi-server setup with PostgreSQL
+- 👍 Need geographic redundancy
+- 👍 Cost optimization for storage
+
+### Recommended Configurations by Deployment Size
+
+#### Small Deployment (< 1,000 users)
+
+```toml
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+```
+
+**Why:** Simplest setup, best performance, minimal resources.
+
+#### Medium Deployment (1,000 - 10,000 users)
+
+```toml
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+```
+
+**Why:** RocksDB still optimal. Consider PostgreSQL if you need multi-server.
+
+#### Large Deployment (10,000+ users)
+
+```toml
+[storage]
+data = "postgres"
+fts = "postgres"
+blob = "s3"
+lookup = "redis"
+```
+
+**Why:** Scalability, HA, and separation of concerns.
+
+#### Multi-Region/HA Deployment
+
+```toml
+[storage]
+data = "postgres"        # With replication
+fts = "postgres"         # Replicated
+blob = "s3"              # Geographic replication
+lookup = "redis"         # Redis Sentinel HA
+```
+
+**Why:** Maximum availability and geographic distribution.
 
 ---
 
