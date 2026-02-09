@@ -31,8 +31,8 @@ services:
       # - ./certs:/opt/stalwart/etc/certs:ro
     
     environment:
-      # Admin password (change this!)
-      - ADMIN_SECRET=${ADMIN_SECRET:-changeme}
+      # Admin password (REQUIRED - change this!)
+      - ADMIN_SECRET=${ADMIN_SECRET:?ADMIN_SECRET must be set in .env file}
       # Stalwart data path
       - STALWART_PATH=/opt/stalwart
       # Optional: Set hostname

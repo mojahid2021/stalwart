@@ -20,18 +20,23 @@ cd stalwart
 
 ### 2. Configure Environment Variables
 
+**IMPORTANT**: You must configure the admin password before starting the service.
+
 Copy the example environment file and customize it:
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set at least the `ADMIN_SECRET`:
+Edit `.env` and set a strong `ADMIN_SECRET`:
 
 ```bash
-# Change the admin password
-ADMIN_SECRET=your_secure_password_here
+# Set a strong admin password (required!)
+# Use at least 12 characters with uppercase, lowercase, numbers, and symbols
+ADMIN_SECRET=your_very_secure_password_here
 ```
+
+**Note**: The service will not start without a valid `ADMIN_SECRET` in your `.env` file.
 
 ### 3. Start Stalwart
 
