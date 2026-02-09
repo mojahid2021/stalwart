@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  stalwart:
+    image: stalwartlabs/mail-server:latest
+    container_name: stalwart-mail
+    hostname: mail.example.com
+    restart: unless-stopped
+    
+    ports:
+      # SMTP
+      - "25:25"       # SMTP
+      - "587:587"     # Submission
+      - "465:465"     # Submissions (SMTP over TLS)
+      # IMAP
+      - "143:143"     # IMAP
+      - "993:993"     # IMAPS (IMAP over TLS)
+      # POP3
+      - "110:110"     # POP3
+      - "995:995"     # POP3S (POP3 over TLS)
+      # ManageSieve
+      - "4190:4190"   # ManageSieve
+      # HTTP/HTTPS (Admin, JMAP, CalDAV, CardDAV)
+      - "443:443"     # HTTPS
+      - "8080:8080"   # HTTP (optional, for redirect or dev)
+    
+    volumes:
+      # Persistent data storage
+      - stalwart-data:/opt/stalwart
+      # Optional: Mount custom configuration
+      # - ./config/config.toml:/opt/stalwart/etc/config.toml:ro
+      # Optional: Mount custom certificates
+      # - ./certs:/opt/stalwart/etc/certs:ro
+    
+    environment:
+      # Admin password (change this!)
+      - ADMIN_SECRET=${ADMIN_SECRET:-changeme}
+      # Stalwart data path
+      - STALWART_PATH=/opt/stalwart
+      # Optional: Set hostname
+      # - HOSTNAME=mail.example.com
+      # Optional: Set domain
+      # - DOMAIN=example.com
+    
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "25"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits (adjust based on your needs)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 512M
+
+volumes:
+  stalwart-data:
+    driver: local
+
+networks:
+  default:
+    name: stalwart-network

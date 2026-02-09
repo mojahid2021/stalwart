@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  stalwart:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stalwart-mail-dev
+    hostname: mail.local
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    
+    ports:
+      # SMTP
+      - "25:25"       # SMTP
+      - "587:587"     # Submission
+      - "465:465"     # Submissions (SMTP over TLS)
+      # IMAP
+      - "143:143"     # IMAP
+      - "993:993"     # IMAPS (IMAP over TLS)
+      # POP3
+      - "110:110"     # POP3
+      - "995:995"     # POP3S (POP3 over TLS)
+      # ManageSieve
+      - "4190:4190"   # ManageSieve
+      # HTTP/HTTPS (Admin, JMAP, CalDAV, CardDAV)
+      - "443:443"     # HTTPS
+      - "8080:8080"   # HTTP
+    
+    volumes:
+      # Persistent data storage
+      - stalwart-data:/opt/stalwart
+      # Mount config for development
+      - ./config:/opt/stalwart-config:ro
+    
+    environment:
+      # Admin password
+      - ADMIN_SECRET=${ADMIN_SECRET:-changeme}
+      - STALWART_PATH=/opt/stalwart
+      # PostgreSQL connection (optional)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-stalwart}
+      - POSTGRES_USER=${POSTGRES_USER:-stalwart}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stalwart_pass}
+      # Redis connection (optional)
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    
+    networks:
+      - stalwart-dev
+    
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "25"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: stalwart-postgres
+    restart: unless-stopped
+    
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-stalwart}
+      - POSTGRES_USER=${POSTGRES_USER:-stalwart}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-stalwart_pass}
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    
+    ports:
+      - "5432:5432"
+    
+    networks:
+      - stalwart-dev
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stalwart}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: stalwart-redis
+    restart: unless-stopped
+    
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_pass}
+    
+    volumes:
+      - redis-data:/data
+    
+    ports:
+      - "6379:6379"
+    
+    networks:
+      - stalwart-dev
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: stalwart-adminer
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    
+    ports:
+      - "8081:8080"
+    
+    networks:
+      - stalwart-dev
+    
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+
+volumes:
+  stalwart-data:
+    driver: local
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  stalwart-dev:
+    name: stalwart-dev-network
