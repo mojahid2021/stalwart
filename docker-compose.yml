@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   stalwart:
-    image: stalwartlabs/mail-server:latest
+    image: stalwartlabs/stalwart:latest
     container_name: stalwart-mail
     hostname: mail.example.com
     restart: unless-stopped
