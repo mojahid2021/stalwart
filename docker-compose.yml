@@ -40,7 +40,8 @@ services:
     environment:
       # Required: Set a secure admin password
       # DO NOT use the default password in production!
-      - ADMIN_SECRET=${ADMIN_SECRET:-changeme123}
+      # Generate with: openssl rand -base64 32
+      - ADMIN_SECRET=${ADMIN_SECRET:?ADMIN_SECRET required - set in .env file}
       
       # Data directory path
       - STALWART_PATH=/opt/stalwart

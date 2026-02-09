@@ -37,7 +37,7 @@ cargo build --release -p stalwart
 # 3. Initialize and run
 mkdir -p /tmp/stalwart-data
 ./target/release/stalwart --init /tmp/stalwart-data
-ADMIN_SECRET=changeme ./target/release/stalwart --config /tmp/stalwart-data/etc/config.toml
+ADMIN_SECRET='MyS3cur3P@ssw0rd!2024' ./target/release/stalwart --config /tmp/stalwart-data/etc/config.toml
 
 # 4. Access at http://localhost:8080
 ```
@@ -52,7 +52,7 @@ docker build -t stalwart:local -f Dockerfile .
 docker run -d --name stalwart \
   -p 25:25 -p 587:587 -p 143:143 -p 8080:8080 \
   -v ./stalwart-data:/opt/stalwart \
-  -e ADMIN_SECRET=changeme123 \
+  -e ADMIN_SECRET='MyS3cur3P@ssw0rd!2024' \
   stalwart:local
 
 # Access at http://localhost:8080

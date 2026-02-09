@@ -232,7 +232,7 @@ store = "rocksdb"
 
 [authentication.fallback-admin]
 user = "admin"
-secret = "changeme123"  # Change this!
+secret = "CHANGE_ME_TO_STRONG_PASSWORD"  # Change this!
 
 [tracer."stdout"]
 type = "stdout"
@@ -254,7 +254,9 @@ ADMIN_SECRET=mysecurepassword ./target/release/stalwart --config /tmp/stalwart-d
 
 Open your browser and navigate to:
 - **Web Admin UI**: http://localhost:8080
-- **Default credentials**: admin / changeme123 (or your ADMIN_SECRET)
+- **Default credentials**: admin / CHANGE_ME_TO_STRONG_PASSWORD (or your ADMIN_SECRET from config)
+
+**Security Note**: Always change the default admin password before exposing the server to the network!
 
 ### Step 8: Testing the Installation
 
@@ -384,7 +386,7 @@ docker run -d \
   -p 443:443 \
   -p 8080:8080 \
   -v ./stalwart-data:/opt/stalwart \
-  -e ADMIN_SECRET=mysecurepassword \
+  -e ADMIN_SECRET=MyS3cur3P@ssw0rd!2024 \
   stalwart:local
 
 # Check logs
@@ -511,7 +513,7 @@ services:
       - ./stalwart-data:/opt/stalwart
     
     environment:
-      - ADMIN_SECRET=${ADMIN_SECRET:-changeme123}
+      - ADMIN_SECRET=${ADMIN_SECRET:?ADMIN_SECRET required - set in .env file}
       - STALWART_PATH=/opt/stalwart
       - TZ=UTC
     
