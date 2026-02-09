@@ -130,6 +130,10 @@ Key features:
 
 ## Get Started
 
+**📚 New to Stalwart?** Check out our comprehensive setup guides:
+- **[Quick Start Guide](./QUICKSTART.md)** - Get up and running in 5 minutes
+- **[Complete Setup Guide](./SETUP.md)** - Detailed documentation for local, Docker, and production deployments
+
 Install Stalwart on your server by following the instructions for your platform:
 
 - [Linux / MacOS](https://stalw.art/docs/install/platform/linux)
