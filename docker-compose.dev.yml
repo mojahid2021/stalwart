@@ -51,7 +51,7 @@ services:
       - stalwart-dev
     
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "25"]
+      test: ["CMD-SHELL", "timeout 3 sh -c 'echo QUIT | nc -w 1 localhost 25' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -99,13 +99,14 @@ services:
       - stalwart-dev
     
     healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli --raw -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli --raw ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
     
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDISCLI_AUTH=${REDIS_PASSWORD}
 
   # Optional: Adminer for database management
   adminer:
