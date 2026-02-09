@@ -1,0 +1,215 @@
+#############################################
+# Stalwart Advanced Configuration
+# This config uses PostgreSQL, Redis, and S3
+#############################################
+
+# ==============================================
+# Server Listeners
+# ==============================================
+
+[server.listener."smtp"]
+bind = ["0.0.0.0:25"]
+protocol = "smtp"
+
+[server.listener."submission"]
+bind = ["0.0.0.0:587"]
+protocol = "smtp"
+
+[server.listener."submissions"]
+bind = ["0.0.0.0:465"]
+protocol = "smtp"
+tls.implicit = true
+
+[server.listener."imap"]
+bind = ["0.0.0.0:143"]
+protocol = "imap"
+
+[server.listener."imaptls"]
+bind = ["0.0.0.0:993"]
+protocol = "imap"
+tls.implicit = true
+
+[server.listener."pop3"]
+bind = ["0.0.0.0:110"]
+protocol = "pop3"
+
+[server.listener."pop3s"]
+bind = ["0.0.0.0:995"]
+protocol = "pop3"
+tls.implicit = true
+
+[server.listener."sieve"]
+bind = ["0.0.0.0:4190"]
+protocol = "managesieve"
+
+[server.listener."https"]
+bind = ["0.0.0.0:443"]
+protocol = "http"
+tls.implicit = true
+
+[server.listener."http"]
+bind = ["0.0.0.0:8080"]
+protocol = "http"
+tls.implicit = false
+
+# ==============================================
+# Storage Configuration
+# ==============================================
+
+[storage]
+# Use PostgreSQL for data and full-text search
+data = "postgres"
+fts = "postgres"
+
+# Use S3 (MinIO) for blob storage (attachments, large files)
+blob = "s3"
+
+# Use Redis for lookups (caching)
+lookup = "redis"
+
+# Use internal directory backed by PostgreSQL
+directory = "internal"
+
+# ==============================================
+# PostgreSQL Store
+# ==============================================
+
+[store."postgres"]
+type = "postgresql"
+host = "%{env:DB_HOST}%"
+port = "%{env:DB_PORT}%"
+database = "%{env:DB_NAME}%"
+user = "%{env:DB_USER}%"
+password = "%{env:DB_PASSWORD}%"
+
+# Connection pool settings
+pool.max-connections = 10
+pool.min-connections = 5
+pool.max-lifetime = "30m"
+
+# ==============================================
+# S3 (MinIO) Store for Blobs
+# ==============================================
+
+[store."s3"]
+type = "s3"
+endpoint = "%{env:S3_ENDPOINT}%"
+bucket = "%{env:S3_BUCKET}%"
+region = "%{env:S3_REGION}%"
+access-key = "%{env:S3_ACCESS_KEY}%"
+secret-key = "%{env:S3_SECRET_KEY}%"
+
+# Optional: Enable path-style addressing for MinIO
+# path-style = true
+
+# ==============================================
+# Redis Store for Caching
+# ==============================================
+
+[store."redis"]
+type = "redis"
+urls = ["redis://:%{env:REDIS_PASSWORD}%@%{env:REDIS_HOST}%:%{env:REDIS_PORT}%"]
+
+# Connection pool settings
+pool.max-connections = 10
+
+# ==============================================
+# Directory Configuration
+# ==============================================
+
+[directory."internal"]
+type = "internal"
+store = "postgres"
+
+# ==============================================
+# Authentication
+# ==============================================
+
+[authentication.fallback-admin]
+user = "admin"
+secret = "%{env:ADMIN_SECRET}%"
+
+# ==============================================
+# Logging and Tracing
+# ==============================================
+
+[tracer."stdout"]
+type = "stdout"
+level = "info"
+ansi = false
+enable = true
+
+# Optional: Enable detailed logging
+# [tracer."stdout"]
+# level = "debug"
+
+# ==============================================
+# TLS Configuration
+# ==============================================
+
+# For production, configure proper TLS certificates
+# [server.tls]
+# certificate = "/path/to/cert.pem"
+# private-key = "/path/to/key.pem"
+
+# Or use ACME (Let's Encrypt) for automatic certificates
+# [acme]
+# directory = "https://acme-v02.api.letsencrypt.org/directory"
+# contact = ["mailto:admin@example.com"]
+
+# ==============================================
+# Spam Filter Configuration (Optional)
+# ==============================================
+
+[spam-filter]
+enable = true
+
+# ==============================================
+# DKIM Signing (Optional)
+# ==============================================
+
+# [dkim."example.com"]
+# domain = "example.com"
+# selector = "default"
+# private-key = "/path/to/dkim.key"
+
+# ==============================================
+# SMTP Server Configuration
+# ==============================================
+
+[smtp.server]
+hostname = "mail.example.com"
+greeting = "Stalwart SMTP Server"
+
+# ==============================================
+# Queue Configuration
+# ==============================================
+
+[smtp.queue]
+# Retry schedule
+retry = ["2m", "5m", "10m", "30m", "1h", "2h", "6h", "12h"]
+
+# ==============================================
+# Rate Limiting (Optional)
+# ==============================================
+
+# [rate-limit."smtp"]
+# rate = "10/1m"
+
+# ==============================================
+# Additional Notes
+# ==============================================
+
+# This configuration uses environment variables for sensitive data
+# Make sure to set these in your .env file:
+# - ADMIN_SECRET
+# - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+# - REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
+# - S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY
+
+# For a complete list of configuration options, see:
+# https://stalw.art/docs/configuration
+
+# Environment variable syntax:
+# %{env:VARIABLE_NAME}% - Required (fails if not set)
+# %{env:VARIABLE_NAME:default}% - Optional with default value

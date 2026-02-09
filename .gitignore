@@ -6,3 +6,5 @@
 run.sh
 _ignore
 .DS_Store
+.env
+stalwart-data/

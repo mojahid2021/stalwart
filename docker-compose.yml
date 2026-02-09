@@ -1,0 +1,80 @@
+# Basic Stalwart Docker Compose Configuration
+# This file builds Stalwart from source and runs it with RocksDB (local storage)
+
+services:
+  stalwart:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stalwart:local
+    container_name: stalwart
+    hostname: mail.example.com
+    restart: unless-stopped
+    
+    ports:
+      # SMTP ports
+      - "25:25"      # SMTP (Mail Transfer Agent)
+      - "587:587"    # Submission (Mail Submission Agent)
+      - "465:465"    # Submissions (Submission over TLS)
+      
+      # IMAP ports
+      - "143:143"    # IMAP
+      - "993:993"    # IMAPS (IMAP over TLS)
+      
+      # POP3 ports (optional, uncomment if needed)
+      # - "110:110"    # POP3
+      # - "995:995"    # POP3S (POP3 over TLS)
+      
+      # Additional services
+      - "4190:4190"  # ManageSieve (Sieve script management)
+      - "8080:8080"  # HTTP Admin Interface
+      - "443:443"    # HTTPS Admin Interface
+    
+    volumes:
+      # Persistent data storage
+      - ./stalwart-data:/opt/stalwart
+      
+      # Optional: Mount custom configuration
+      # - ./config.toml:/opt/stalwart/etc/config.toml:ro
+    
+    environment:
+      # Required: Set a secure admin password
+      # DO NOT use the default password in production!
+      - ADMIN_SECRET=${ADMIN_SECRET:-changeme123}
+      
+      # Data directory path
+      - STALWART_PATH=/opt/stalwart
+      
+      # Timezone
+      - TZ=${TZ:-UTC}
+    
+    # Health check to ensure service is running
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - stalwart-net
+    
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+networks:
+  stalwart-net:
+    driver: bridge
+
+# To use this file:
+# 1. Create a .env file with: ADMIN_SECRET=your-secure-password
+# 2. Run: docker-compose up -d
+# 3. Access admin interface at: http://localhost:8080
+# 4. Login with: admin / your-secure-password
