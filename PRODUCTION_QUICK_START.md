@@ -141,6 +141,34 @@ default._domainkey.yourdomain.com. TXT "v=DKIM1; k=rsa; p=YOUR_PUBLIC_KEY"
 _dmarc.yourdomain.com.      TXT     "v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com"
 ```
 
+### Separate Admin Subdomain (Optional)
+
+To use `admin.yourdomain.com` for admin panel and `mail.yourdomain.com` for mail:
+
+```dns
+# Add admin subdomain
+admin.yourdomain.com.       A       YOUR_SERVER_IP
+```
+
+**Quick setup with Caddy (recommended):**
+
+```bash
+# Install Caddy
+sudo apt install caddy
+
+# Configure (/etc/caddy/Caddyfile)
+admin.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+
+# Restart
+sudo systemctl restart caddy
+```
+
+Now access admin panel at `https://admin.yourdomain.com` and mail stays at `mail.yourdomain.com`.
+
+For detailed configuration with nginx or direct SNI setup, see [SETUP.md - Section 7a](./SETUP.md#production-deployment-guide).
+
 ## TLS/SSL Setup
 
 ```bash

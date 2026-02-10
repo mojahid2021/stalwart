@@ -1007,6 +1007,222 @@ autoconfig.yourdomain.com.  CNAME   mail.yourdomain.com.
 autodiscover.yourdomain.com. CNAME  mail.yourdomain.com.
 ```
 
+**7a. Configure Separate Subdomains for Admin Panel and Mail (Optional)**
+
+If you want to use different subdomains for the admin panel (`admin.yourdomain.com`) and mail services (`mail.yourdomain.com`), follow these steps:
+
+**DNS Configuration for Separate Subdomains:**
+
+```dns
+# A Records
+mail.yourdomain.com.        A       YOUR_SERVER_IP
+admin.yourdomain.com.       A       YOUR_SERVER_IP
+
+# MX Record (mail only)
+yourdomain.com.             MX 10   mail.yourdomain.com.
+
+# SPF, DKIM, DMARC (same as above)
+# Autodiscover points to mail subdomain
+autoconfig.yourdomain.com.  CNAME   mail.yourdomain.com.
+autodiscover.yourdomain.com. CNAME  mail.yourdomain.com.
+```
+
+**Method 1: Using Reverse Proxy (Recommended)**
+
+Use nginx or Caddy as a reverse proxy to route traffic based on subdomain:
+
+```bash
+# Install nginx
+sudo apt install nginx
+
+# Create nginx configuration
+sudo nano /etc/nginx/sites-available/stalwart
+```
+
+Add this configuration:
+
+```nginx
+# Admin panel - admin.yourdomain.com
+server {
+    listen 443 ssl http2;
+    server_name admin.yourdomain.com;
+    
+    ssl_certificate /etc/letsencrypt/live/admin.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/admin.yourdomain.com/privkey.pem;
+    
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# Mail services - mail.yourdomain.com
+# SMTP/IMAP/POP3 pass-through (nginx stream module)
+stream {
+    # SMTP
+    server {
+        listen 25;
+        proxy_pass localhost:2525;  # Stalwart on internal port
+    }
+    
+    # IMAP
+    server {
+        listen 143;
+        proxy_pass localhost:1143;  # Stalwart on internal port
+    }
+    
+    # IMAPS
+    server {
+        listen 993 ssl;
+        ssl_certificate /etc/letsencrypt/live/mail.yourdomain.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/mail.yourdomain.com/privkey.pem;
+        proxy_pass localhost:9993;
+    }
+}
+```
+
+**Update Stalwart Configuration** (`/opt/stalwart/config/config.toml`):
+
+```toml
+# Set server hostname for mail services
+[server]
+hostname = "mail.yourdomain.com"
+
+# HTTP listener for admin (behind nginx)
+[server.listener."http-admin"]
+bind = ["127.0.0.1:8080"]  # Only localhost
+protocol = "http"
+
+# SMTP listeners (adjust ports if using nginx)
+[server.listener."smtp"]
+bind = ["0.0.0.0:2525"]  # Internal port if using nginx
+protocol = "smtp"
+
+[server.listener."imap"]
+bind = ["0.0.0.0:1143"]  # Internal port if using nginx
+protocol = "imap"
+
+[server.listener."imaptls"]
+bind = ["0.0.0.0:9993"]  # Internal port if using nginx
+protocol = "imap"
+tls.implicit = true
+```
+
+Enable and start nginx:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/stalwart /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+**Method 2: Using Caddy (Simpler)**
+
+Caddy automatically handles TLS certificates:
+
+```bash
+# Install Caddy
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install caddy
+
+# Create Caddyfile
+sudo nano /etc/caddy/Caddyfile
+```
+
+Add this configuration:
+
+```caddy
+# Admin panel
+admin.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+
+# Mail services use standard ports (no proxy needed for SMTP/IMAP)
+```
+
+Restart Caddy:
+
+```bash
+sudo systemctl restart caddy
+```
+
+**Method 3: Multiple TLS Certificates with SNI**
+
+Configure Stalwart to handle both domains directly using Server Name Indication (SNI):
+
+```bash
+# Get certificates for both domains
+sudo certbot certonly --standalone -d mail.yourdomain.com
+sudo certbot certonly --standalone -d admin.yourdomain.com
+```
+
+**Update Stalwart Configuration** to use SNI:
+
+```toml
+[server]
+hostname = "mail.yourdomain.com"
+
+# HTTPS listener with SNI support
+[server.listener."https-admin"]
+bind = ["0.0.0.0:443"]
+protocol = "http"
+tls.implicit = true
+
+# Configure TLS certificates (simplified - actual config may vary)
+[certificate."admin"]
+cert = "/etc/letsencrypt/live/admin.yourdomain.com/fullchain.pem"
+private-key = "/etc/letsencrypt/live/admin.yourdomain.com/privkey.pem"
+
+[certificate."mail"]
+cert = "/etc/letsencrypt/live/mail.yourdomain.com/fullchain.pem"
+private-key = "/etc/letsencrypt/live/mail.yourdomain.com/privkey.pem"
+```
+
+**Update Docker Compose** (if using Method 1 with nginx):
+
+```yaml
+services:
+  stalwart:
+    hostname: mail.yourdomain.com
+    ports:
+      # Use internal ports if behind nginx
+      - "127.0.0.1:8080:8080"  # Admin only on localhost
+      - "2525:25"              # SMTP internal
+      - "1143:143"             # IMAP internal
+      - "9993:993"             # IMAPS internal
+      # Or use standard ports if not using nginx
+    environment:
+      - SERVER_HOSTNAME=mail.yourdomain.com
+```
+
+**Testing the Configuration:**
+
+```bash
+# Test admin panel
+curl -I https://admin.yourdomain.com
+
+# Test SMTP on mail subdomain
+telnet mail.yourdomain.com 25
+
+# Check certificates
+openssl s_client -connect admin.yourdomain.com:443 -servername admin.yourdomain.com
+openssl s_client -connect mail.yourdomain.com:993 -servername mail.yourdomain.com
+```
+
+**Recommended Approach:**
+
+For most users, **Method 2 (Caddy)** is the simplest:
+- Automatic TLS certificates
+- Simple configuration
+- Admin panel on admin.yourdomain.com
+- Mail services remain on standard ports with mail.yourdomain.com
+
 **8. Initial Configuration**
 
 ```bash

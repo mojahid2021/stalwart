@@ -1,0 +1,142 @@
+#############################################
+# Stalwart Configuration
+# Separate Subdomains Setup
+# Mail: mail.yourdomain.com
+# Admin: admin.yourdomain.com (via reverse proxy)
+#############################################
+
+# Server hostname for mail services
+[server]
+hostname = "mail.yourdomain.com"
+
+# ==============================================
+# Server Listeners
+# ==============================================
+
+# SMTP Listeners
+[server.listener."smtp"]
+bind = ["0.0.0.0:25"]
+protocol = "smtp"
+
+[server.listener."submission"]
+bind = ["0.0.0.0:587"]
+protocol = "smtp"
+
+[server.listener."submissions"]
+bind = ["0.0.0.0:465"]
+protocol = "smtp"
+tls.implicit = true
+
+# IMAP Listeners
+[server.listener."imap"]
+bind = ["0.0.0.0:143"]
+protocol = "imap"
+
+[server.listener."imaptls"]
+bind = ["0.0.0.0:993"]
+protocol = "imap"
+tls.implicit = true
+
+# POP3 Listeners
+[server.listener."pop3"]
+bind = ["0.0.0.0:110"]
+protocol = "pop3"
+
+[server.listener."pop3s"]
+bind = ["0.0.0.0:995"]
+protocol = "pop3"
+tls.implicit = true
+
+# ManageSieve Listener
+[server.listener."sieve"]
+bind = ["0.0.0.0:4190"]
+protocol = "managesieve"
+
+# HTTP Admin Interface
+# Bind to localhost only - admin.yourdomain.com accessed via reverse proxy
+[server.listener."http-admin"]
+bind = ["127.0.0.1:8080"]
+protocol = "http"
+
+# Note: TLS termination handled by reverse proxy (Caddy/nginx)
+# The reverse proxy will forward to this localhost:8080 endpoint
+
+# ==============================================
+# Storage Configuration
+# ==============================================
+
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+directory = "internal"
+
+[store."rocksdb"]
+type = "rocksdb"
+path = "%{env:STALWART_PATH}%/data"
+compression = "lz4"
+
+# Optional: Increase cache for better performance
+# cache.size = "2GB"
+
+# ==============================================
+# Directory Configuration
+# ==============================================
+
+[directory."internal"]
+type = "internal"
+store = "rocksdb"
+
+# ==============================================
+# Authentication
+# ==============================================
+
+[authentication.fallback-admin]
+user = "admin"
+secret = "%{env:ADMIN_SECRET}%"
+
+# ==============================================
+# Logging and Tracing
+# ==============================================
+
+[tracer."stdout"]
+type = "stdout"
+level = "info"
+ansi = false
+enable = true
+
+# ==============================================
+# SMTP Server Configuration
+# ==============================================
+
+[smtp.server]
+# Server hostname used in SMTP greetings
+hostname = "mail.yourdomain.com"
+greeting = "Stalwart SMTP at your service"
+
+# ==============================================
+# TLS Configuration (Optional)
+# ==============================================
+
+# If you want Stalwart to handle TLS directly for mail services
+# (admin.yourdomain.com TLS is handled by reverse proxy)
+
+# [certificate."mail"]
+# cert = "/etc/letsencrypt/live/mail.yourdomain.com/fullchain.pem"
+# private-key = "/etc/letsencrypt/live/mail.yourdomain.com/privkey.pem"
+
+# ==============================================
+# NOTES
+# ==============================================
+
+# This configuration separates:
+# 1. Mail services (SMTP/IMAP/POP3) on mail.yourdomain.com
+# 2. Admin panel on admin.yourdomain.com (via reverse proxy)
+#
+# Setup requirements:
+# 1. DNS: Both mail.yourdomain.com and admin.yourdomain.com point to server IP
+# 2. Reverse proxy (Caddy or nginx) forwards admin.yourdomain.com to localhost:8080
+# 3. Firewall allows ports: 25, 587, 465, 143, 993, 110, 995, 4190, 80, 443
+#
+# See SEPARATE_DOMAINS_SETUP.md for complete configuration guide
