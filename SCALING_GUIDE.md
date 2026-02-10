@@ -46,6 +46,51 @@ Vertical scaling involves increasing resources (CPU, RAM, disk) on a single serv
 - Simpler operations preferred
 - Cost-effective for small-medium deployments
 
+### Docker Resource Configuration
+
+**Dynamic Resource Allocation (Default):**
+
+By default, all Docker Compose configurations use dynamic resource allocation:
+- **No hard limits**: Containers can use as much CPU/memory as needed
+- **Soft limits (reservations)**: Minimum guaranteed resources
+- **Intelligent scaling**: Docker allocates more when workload increases, less when idle
+
+**Configuration approach:**
+```yaml
+deploy:
+  resources:
+    # No limits section = dynamic allocation
+    reservations:
+      memory: 1G    # Minimum guaranteed
+      cpus: '1'     # Minimum guaranteed
+```
+
+**Benefits:**
+- ✅ Automatically scales with workload
+- ✅ Uses less resources during quiet periods
+- ✅ Can handle traffic spikes without manual intervention
+- ✅ No need to predict exact resource needs
+- ✅ Better resource utilization across all containers
+
+**When to use hard limits:**
+
+Add hard limits only if you need to:
+- Prevent a single container from consuming all host resources
+- Enforce resource quotas for billing/accounting
+- Test behavior under resource constraints
+
+**Example with hard limits (optional):**
+```yaml
+deploy:
+  resources:
+    limits:
+      memory: 4G    # Maximum allowed
+      cpus: '4'     # Maximum allowed
+    reservations:
+      memory: 1G    # Minimum guaranteed
+      cpus: '1'     # Minimum guaranteed
+```
+
 ### Hardware Recommendations
 
 #### Small Deployment (< 1,000 users)
@@ -72,32 +117,7 @@ Disk: 1-2 TB NVMe SSD
 Storage: PostgreSQL + S3 for blobs
 ```
 
-### Docker Resource Configuration
-
-Use environment variables for flexible resource allocation:
-
-**`.env` file:**
-```bash
-# Resource limits (adjust based on your server)
-STALWART_MEMORY_LIMIT=4G
-STALWART_MEMORY_RESERVATION=2G
-STALWART_CPU_LIMIT=4
-STALWART_CPU_RESERVATION=2
-```
-
-**`docker-compose.yml` with flexible resources:**
-```yaml
-services:
-  stalwart:
-    deploy:
-      resources:
-        limits:
-          memory: ${STALWART_MEMORY_LIMIT:-4G}
-          cpus: ${STALWART_CPU_LIMIT:-4}
-        reservations:
-          memory: ${STALWART_MEMORY_RESERVATION:-1G}
-          cpus: ${STALWART_CPU_RESERVATION:-1}
-```
+**Original section replaced - see "Docker Resource Configuration" section above (after line 75)**
 
 ### RocksDB Tuning for Vertical Scaling
 

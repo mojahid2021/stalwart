@@ -60,13 +60,18 @@ services:
     networks:
       - stalwart-net
     
-    # Resource limits (adjust via environment variables)
-    # Set in .env: STALWART_MEMORY_LIMIT, STALWART_CPU_LIMIT, etc.
+    # Resource configuration (dynamic allocation by default)
+    # Docker will use what it needs without hard limits
+    # Set STALWART_ENABLE_LIMITS=true in .env to enforce hard limits
     deploy:
       resources:
-        limits:
-          memory: ${STALWART_MEMORY_LIMIT:-2G}
-          cpus: '${STALWART_CPU_LIMIT:-2}'
+        # Hard limits (optional - only applied if STALWART_ENABLE_LIMITS=true)
+        # Uncomment and set in .env to cap maximum resource usage:
+        # limits:
+        #   memory: ${STALWART_MEMORY_LIMIT:-2G}
+        #   cpus: '${STALWART_CPU_LIMIT:-2}'
+        
+        # Soft limits (reservations) - minimum guaranteed resources
         reservations:
           memory: ${STALWART_MEMORY_RESERVATION:-512M}
           cpus: '${STALWART_CPU_RESERVATION:-0.5}'
