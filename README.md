@@ -134,7 +134,8 @@ Key features:
 - **[Quick Start Guide](./QUICKSTART.md)** - Get up and running in 5 minutes
 - **[Production Quick Start](./PRODUCTION_QUICK_START.md)** - Deploy to production with Docker in 5 minutes ⭐
 - **[Separate Domains Setup](./SEPARATE_DOMAINS_SETUP.md)** - Configure admin.domain.com and mail.domain.com ⭐
-- **[Scaling Guide](./SCALING_GUIDE.md)** - Horizontal and vertical scaling strategies ⭐ NEW
+- **[Scaling Guide](./SCALING_GUIDE.md)** - Horizontal and vertical scaling strategies ⭐
+- **[Performance & SaaS Analysis](./PERFORMANCE_AND_SAAS_ANALYSIS.md)** - Limits, optimization, database selection, and SaaS deployment ⭐ NEW
 - **[Complete Setup Guide](./SETUP.md)** - Detailed documentation for local, Docker, and production deployments
 
 Install Stalwart on your server by following the instructions for your platform:
