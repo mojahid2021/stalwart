@@ -136,6 +136,7 @@ Key features:
 - **[Separate Domains Setup](./SEPARATE_DOMAINS_SETUP.md)** - Configure admin.domain.com and mail.domain.com ⭐
 - **[Scaling Guide](./SCALING_GUIDE.md)** - Horizontal and vertical scaling strategies ⭐
 - **[Performance & SaaS Analysis](./PERFORMANCE_AND_SAAS_ANALYSIS.md)** - Limits, optimization, database selection, and SaaS deployment ⭐ NEW
+- **[Performance Quick Reference](./PERFORMANCE_QUICK_REFERENCE.md)** - Quick decision matrix and benchmarks ⭐ NEW
 - **[Complete Setup Guide](./SETUP.md)** - Detailed documentation for local, Docker, and production deployments
 
 Install Stalwart on your server by following the instructions for your platform:
