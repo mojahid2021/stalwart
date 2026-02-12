@@ -142,6 +142,27 @@ docker compose version
 
 ## Quick Start
 
+### Step 0: Validate Your Setup (Optional but Recommended)
+
+Before starting, you can use the validation script to check your setup:
+
+```bash
+# Make the script executable (if not already)
+chmod +x validate-setup.sh
+
+# Run validation
+./validate-setup.sh
+```
+
+The validation script checks:
+- ✅ Docker and Docker Compose installation
+- ✅ Required files (.env, docker-compose.advanced.yml, config-advanced.toml)
+- ✅ Environment variables are set correctly
+- ✅ No placeholder passwords remain
+- ✅ Sufficient disk space and memory
+- ✅ Required ports are available
+- ✅ Docker Compose file syntax
+
 ### Step 1: Clone the Repository
 
 ```bash
@@ -1500,6 +1521,9 @@ region = "us-east-1"
 ### Quick Command Reference
 
 ```bash
+# Validate setup before starting
+./validate-setup.sh
+
 # Start services
 docker compose -f docker-compose.advanced.yml up -d --build
 
