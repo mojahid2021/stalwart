@@ -1,0 +1,383 @@
+# Advanced Stalwart Docker Compose - Separate Admin Domain Configuration
+# This setup includes PostgreSQL, Redis, MinIO, and Caddy reverse proxy
+# for a production-ready deployment with separate admin domain
+#
+# 📚 Complete Guide: See MULTI_SERVICE_SETUP.md for detailed documentation
+# 🔐 Security: Admin panel isolated on separate domain with automatic HTTPS
+#
+# Architecture:
+# - Mail services: mail.yourdomain.com (direct access on standard ports)
+# - Admin panel: admin.yourdomain.com (via Caddy reverse proxy with auto-HTTPS)
+# - Database: PostgreSQL (internal network only)
+# - Cache: Redis (internal network only)
+# - Storage: MinIO S3-compatible (internal network only)
+#
+# Quick Start:
+# 1. Copy .env.example to .env and set secure passwords
+# 2. Set ADMIN_DOMAIN and MAIL_DOMAIN in .env file
+# 3. Configure DNS: Point both domains to your server IP
+# 4. Run: docker compose -f docker-compose.advanced-separate-domains.yml up -d --build
+# 5. Access Admin: https://admin.yourdomain.com (automatic HTTPS via Caddy)
+# 6. Access MinIO Console: http://localhost:9001 (internal only)
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: stalwart-postgres
+    restart: unless-stopped
+    
+    environment:
+      POSTGRES_DB: stalwart
+      POSTGRES_USER: stalwart
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    
+    networks:
+      - stalwart-internal
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stalwart"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    deploy:
+      resources:
+        reservations:
+          memory: ${POSTGRES_MEMORY_RESERVATION:-512M}
+          cpus: '${POSTGRES_CPU_RESERVATION:-0.5}'
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: stalwart-redis
+    restart: unless-stopped
+    
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD required}
+    
+    volumes:
+      - redis-data:/data
+    
+    networks:
+      - stalwart-internal
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "--askpass", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    deploy:
+      resources:
+        reservations:
+          memory: ${REDIS_MEMORY_RESERVATION:-256M}
+          cpus: '${REDIS_CPU_RESERVATION:-0.25}'
+
+  # MinIO (S3-Compatible Object Storage)
+  minio:
+    image: minio/minio:latest
+    container_name: stalwart-minio
+    restart: unless-stopped
+    
+    command: server /data --console-address ":9001"
+    
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:?MINIO_PASSWORD required}
+    
+    volumes:
+      - minio-data:/data
+    
+    ports:
+      # MinIO Console (web UI) - localhost only for security
+      - "127.0.0.1:9001:9001"
+    
+    networks:
+      - stalwart-internal
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    deploy:
+      resources:
+        reservations:
+          memory: ${MINIO_MEMORY_RESERVATION:-512M}
+          cpus: '${MINIO_CPU_RESERVATION:-0.5}'
+
+  # MinIO Client - Initialize bucket (runs once)
+  minio-init:
+    image: minio/mc:latest
+    container_name: stalwart-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_USER:-minioadmin} ${MINIO_PASSWORD} &&
+      /usr/bin/mc mb myminio/stalwart-blobs --ignore-existing &&
+      /usr/bin/mc anonymous set download myminio/stalwart-blobs &&
+      echo 'MinIO bucket initialized successfully'
+      "
+    
+    networks:
+      - stalwart-internal
+
+  # Stalwart Mail Server
+  stalwart:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stalwart:local
+    container_name: stalwart
+    hostname: ${MAIL_DOMAIN:-mail.example.com}
+    restart: unless-stopped
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    
+    ports:
+      # SMTP ports - Direct access
+      - "25:25"      # SMTP (Mail Transfer Agent)
+      - "587:587"    # Submission (Mail Submission Agent)
+      - "465:465"    # Submissions (Submission over TLS)
+      
+      # IMAP ports - Direct access
+      - "143:143"    # IMAP
+      - "993:993"    # IMAPS (IMAP over TLS)
+      
+      # POP3 ports - Direct access
+      - "110:110"    # POP3
+      - "995:995"    # POP3S (POP3 over TLS)
+      
+      # Additional services
+      - "4190:4190"  # ManageSieve
+      
+      # Admin Interface - localhost only (accessed via Caddy reverse proxy)
+      - "127.0.0.1:8080:8080"  # HTTP Admin Interface (internal only)
+    
+    volumes:
+      # Persistent configuration and logs
+      - ./stalwart-data:/opt/stalwart
+      
+      # Mount custom configuration file for separate domains
+      - ./config-advanced-separate-domains.toml:/opt/stalwart/etc/config.toml:ro
+    
+    environment:
+      # Admin credentials
+      - ADMIN_SECRET=${ADMIN_SECRET:?ADMIN_SECRET required}
+      
+      # Stalwart paths
+      - STALWART_PATH=/opt/stalwart
+      
+      # Domain configuration
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-mail.example.com}
+      - ADMIN_DOMAIN=${ADMIN_DOMAIN:-admin.example.com}
+      
+      # PostgreSQL connection
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=stalwart
+      - DB_USER=stalwart
+      - DB_PASSWORD=${DB_PASSWORD}
+      
+      # Redis connection
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      
+      # MinIO/S3 connection
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=stalwart-blobs
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY=${MINIO_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_PASSWORD}
+      
+      # System settings
+      - TZ=${TZ:-UTC}
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    networks:
+      - stalwart-internal
+    
+    deploy:
+      resources:
+        reservations:
+          memory: ${STALWART_MEMORY_RESERVATION:-1G}
+          cpus: '${STALWART_CPU_RESERVATION:-1}'
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Caddy Reverse Proxy (Admin Panel with Automatic HTTPS)
+  caddy:
+    image: caddy:2-alpine
+    container_name: stalwart-caddy
+    restart: unless-stopped
+    
+    depends_on:
+      stalwart:
+        condition: service_healthy
+    
+    ports:
+      # HTTP and HTTPS for admin domain
+      - "80:80"      # HTTP (for ACME challenge and redirect)
+      - "443:443"    # HTTPS (admin panel)
+      - "443:443/udp" # HTTP/3
+    
+    volumes:
+      # Caddy configuration
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddy data (certificates, etc.)
+      - caddy-data:/data
+      - caddy-config:/config
+    
+    environment:
+      - ADMIN_DOMAIN=${ADMIN_DOMAIN:-admin.example.com}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
+    
+    networks:
+      - stalwart-internal
+    
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/config/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  stalwart-internal:
+    driver: bridge
+    internal: false
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+
+# ==============================================================================
+# DEPLOYMENT INSTRUCTIONS
+# ==============================================================================
+#
+# 1. SETUP ENVIRONMENT FILE
+#    Copy .env.example to .env and customize:
+#    cp .env.example .env
+#    nano .env
+#
+#    Required variables:
+#    - ADMIN_SECRET=your-secure-admin-password
+#    - DB_PASSWORD=your-secure-db-password
+#    - REDIS_PASSWORD=your-secure-redis-password
+#    - MINIO_PASSWORD=your-secure-minio-password
+#    - ADMIN_DOMAIN=admin.yourdomain.com
+#    - MAIL_DOMAIN=mail.yourdomain.com
+#    - ACME_EMAIL=admin@yourdomain.com
+#    - TZ=UTC
+#
+# 2. CREATE CADDY CONFIGURATION
+#    Create caddy/Caddyfile with admin domain configuration
+#    See step 3 below for template
+#
+# 3. CONFIGURE DNS
+#    Point both domains to your server IP:
+#    - mail.yourdomain.com    A    YOUR_SERVER_IP
+#    - admin.yourdomain.com   A    YOUR_SERVER_IP
+#    - yourdomain.com         MX   mail.yourdomain.com
+#
+# 4. BUILD AND START
+#    docker compose -f docker-compose.advanced-separate-domains.yml up -d --build
+#
+# 5. MONITOR LOGS
+#    docker compose -f docker-compose.advanced-separate-domains.yml logs -f
+#
+# 6. ACCESS SERVICES
+#    - Admin Panel: https://admin.yourdomain.com (automatic HTTPS)
+#    - Mail Server: mail.yourdomain.com (for email clients)
+#    - MinIO Console: http://localhost:9001 (local only)
+#
+# 7. STOP SERVICES
+#    docker compose -f docker-compose.advanced-separate-domains.yml down
+#
+# ==============================================================================
+# SECURITY BENEFITS
+# ==============================================================================
+#
+# ✓ Admin panel isolated on separate domain
+# ✓ Admin only accessible via HTTPS (automatic certificates)
+# ✓ Admin bound to localhost, accessed via reverse proxy only
+# ✓ Internal services (DB, Redis, MinIO) not exposed externally
+# ✓ Automatic TLS certificate management with Let's Encrypt
+# ✓ Security headers added by Caddy
+# ✓ Clear separation of concerns (mail vs admin)
+# ✓ Professional domain structure
+#
+# ==============================================================================
+# FIREWALL CONFIGURATION
+# ==============================================================================
+#
+# Required open ports:
+# - 25    (SMTP)
+# - 587   (Submission)
+# - 465   (Submissions)
+# - 143   (IMAP)
+# - 993   (IMAPS)
+# - 110   (POP3)
+# - 995   (POP3S)
+# - 4190  (ManageSieve)
+# - 80    (HTTP - ACME challenge)
+# - 443   (HTTPS - Admin panel)
+#
+# ==============================================================================
+# COMPLETE DOCUMENTATION
+# ==============================================================================
+#
+# 📚 See MULTI_SERVICE_SETUP.md for:
+#    - Detailed setup instructions
+#    - Troubleshooting guide
+#    - Backup and restore procedures
+#    - Scaling strategies
+#    - Security hardening
+#    - Monitoring setup
+#
+# 📚 See SEPARATE_DOMAINS_SETUP.md for:
+#    - Reverse proxy configuration
+#    - DNS setup
+#    - TLS certificate management
+#    - Nginx alternative configuration
+#
+# ==============================================================================

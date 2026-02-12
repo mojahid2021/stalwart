@@ -12,16 +12,18 @@ This guide provides comprehensive instructions for deploying Stalwart Mail Serve
 2. [Why Use This Setup?](#why-use-this-setup)
 3. [Architecture Diagram](#architecture-diagram)
 4. [Prerequisites](#prerequisites)
-5. [Quick Start](#quick-start)
-6. [Detailed Configuration](#detailed-configuration)
-7. [Service Details](#service-details)
-8. [Environment Variables](#environment-variables)
-9. [Storage Configuration](#storage-configuration)
-10. [Health Checks & Monitoring](#health-checks--monitoring)
-11. [Troubleshooting](#troubleshooting)
-12. [Production Considerations](#production-considerations)
-13. [Backup & Restore](#backup--restore)
-14. [Scaling Strategies](#scaling-strategies)
+5. [Deployment Options](#deployment-options)
+6. [Quick Start](#quick-start)
+7. [Detailed Configuration](#detailed-configuration)
+8. [Service Details](#service-details)
+9. [Environment Variables](#environment-variables)
+10. [Storage Configuration](#storage-configuration)
+11. [Health Checks & Monitoring](#health-checks--monitoring)
+12. [Separate Domains Configuration (Option 2)](#separate-domains-configuration-option-2)
+13. [Troubleshooting](#troubleshooting)
+14. [Production Considerations](#production-considerations)
+15. [Backup & Restore](#backup--restore)
+16. [Scaling Strategies](#scaling-strategies)
 
 ---
 
@@ -137,6 +139,29 @@ docker compose version
 
 # Logout and login again for group changes to take effect
 ```
+
+---
+
+## Deployment Options
+
+This guide covers **two deployment approaches**:
+
+### Option 1: Standard Setup (Simpler)
+- Admin panel and mail services on same domain/ports
+- Admin accessible at `http://localhost:8080`
+- Uses: `docker-compose.advanced.yml`
+- Best for: Development, testing, or simple deployments
+
+### Option 2: Separate Domains Setup (Recommended for Production)
+- Admin panel on dedicated domain (e.g., `admin.yourdomain.com`)
+- Mail services on dedicated domain (e.g., `mail.yourdomain.com`)
+- Uses: `docker-compose.advanced-separate-domains.yml`
+- Includes: Caddy reverse proxy with automatic HTTPS
+- Best for: Production, enhanced security, professional setup
+
+**This guide covers both options**. Choose based on your needs:
+- 📖 For **Standard Setup**: Follow all steps normally
+- 🔐 For **Separate Domains**: See [Separate Domains Configuration](#separate-domains-configuration-option-2) section
 
 ---
 
@@ -966,6 +991,235 @@ docker network inspect stalwart_stalwart-net
 # View connected containers
 docker network inspect stalwart_stalwart-net --format='{{json .Containers}}' | jq
 ```
+
+---
+
+## Separate Domains Configuration (Option 2)
+
+For **production deployments**, it's recommended to separate your admin panel from mail services using different domains. This provides better security, clearer separation of concerns, and a more professional setup.
+
+### Benefits of Separate Domains
+
+✅ **Enhanced Security**: Admin panel not directly exposed, accessed only via reverse proxy  
+✅ **Automatic HTTPS**: Let's Encrypt certificates managed by Caddy  
+✅ **Professional Setup**: Clear separation (e.g., mail.example.com vs admin.example.com)  
+✅ **Scalability**: Admin can be moved to different server if needed  
+✅ **Security Headers**: Additional protection from reverse proxy  
+✅ **Isolated Access**: Admin bound to localhost, mail on public interfaces
+
+### Architecture Overview
+
+```
+Internet
+   │
+   ├─► mail.example.com:25,587,465,143,993 ─► Stalwart (Mail Services)
+   │
+   └─► admin.example.com:443 ─► Caddy Proxy ─► Stalwart:8080 (Admin Panel)
+```
+
+### Quick Start with Separate Domains
+
+#### 1. Configure DNS
+
+Point both domains to your server IP:
+
+```dns
+mail.example.com      A      YOUR_SERVER_IP
+admin.example.com     A      YOUR_SERVER_IP
+example.com           MX 10  mail.example.com
+```
+
+#### 2. Create Environment File
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Add domain configuration:
+
+```bash
+# Required passwords (generate with: openssl rand -base64 32)
+ADMIN_SECRET=your-secure-admin-password
+DB_PASSWORD=your-secure-db-password
+REDIS_PASSWORD=your-secure-redis-password
+MINIO_PASSWORD=your-secure-minio-password
+
+# Domain configuration
+MAIL_DOMAIN=mail.example.com
+ADMIN_DOMAIN=admin.example.com
+ACME_EMAIL=admin@example.com
+
+# System
+TZ=UTC
+
+# Resource configuration (optional)
+STALWART_MEMORY_RESERVATION=1G
+STALWART_CPU_RESERVATION=1
+POSTGRES_MEMORY_RESERVATION=512M
+POSTGRES_CPU_RESERVATION=0.5
+REDIS_MEMORY_RESERVATION=256M
+REDIS_CPU_RESERVATION=0.25
+MINIO_MEMORY_RESERVATION=512M
+MINIO_CPU_RESERVATION=0.5
+```
+
+#### 3. Review Caddy Configuration
+
+The Caddy configuration is pre-configured in `caddy/Caddyfile`. It includes:
+- Automatic HTTPS with Let's Encrypt
+- Security headers (HSTS, CSP, X-Frame-Options, etc.)
+- Reverse proxy to Stalwart admin panel
+- Health checks and error handling
+
+You can customize it if needed. See `caddy/README.md` for details.
+
+#### 4. Deploy with Separate Domains
+
+```bash
+# Start all services with separate domains configuration
+docker compose -f docker-compose.advanced-separate-domains.yml up -d --build
+
+# Monitor logs
+docker compose -f docker-compose.advanced-separate-domains.yml logs -f
+
+# Check service health
+docker compose -f docker-compose.advanced-separate-domains.yml ps
+```
+
+#### 5. Verify Setup
+
+```bash
+# Test admin panel (HTTPS with automatic certificate)
+curl -I https://admin.example.com
+
+# Test SMTP
+telnet mail.example.com 25
+
+# Test IMAP
+openssl s_client -connect mail.example.com:993
+
+# Check Caddy logs
+docker logs stalwart-caddy
+
+# Check Stalwart logs
+docker logs stalwart
+```
+
+#### 6. Access Services
+
+- **Admin Panel**: https://admin.example.com (automatic HTTPS)
+  - Login: `admin` / your ADMIN_SECRET
+- **Mail Server**: mail.example.com (for email clients)
+- **MinIO Console**: http://localhost:9001 (local access only)
+
+### Firewall Configuration for Separate Domains
+
+```bash
+# Open required ports
+sudo ufw allow 25/tcp     # SMTP
+sudo ufw allow 587/tcp    # Submission
+sudo ufw allow 465/tcp    # Submissions
+sudo ufw allow 143/tcp    # IMAP
+sudo ufw allow 993/tcp    # IMAPS
+sudo ufw allow 110/tcp    # POP3
+sudo ufw allow 995/tcp    # POP3S
+sudo ufw allow 4190/tcp   # ManageSieve
+sudo ufw allow 80/tcp     # HTTP (ACME challenge)
+sudo ufw allow 443/tcp    # HTTPS (Admin panel)
+sudo ufw enable
+```
+
+### Troubleshooting Separate Domains Setup
+
+#### Admin Panel Not Accessible
+
+```bash
+# Check if Caddy is running
+docker ps | grep caddy
+
+# Check Caddy logs for errors
+docker logs stalwart-caddy
+
+# Verify DNS resolution
+dig admin.example.com
+nslookup admin.example.com
+
+# Test backend connection
+docker exec stalwart-caddy wget -O- http://stalwart:8080/health
+
+# Validate Caddyfile syntax
+docker exec stalwart-caddy caddy validate --config /etc/caddy/Caddyfile
+```
+
+#### Certificate Issues
+
+```bash
+# Check certificate status
+docker exec stalwart-caddy caddy list-certificates
+
+# View ACME logs
+docker logs stalwart-caddy 2>&1 | grep -i acme
+
+# Ensure port 80 is open for ACME challenge
+sudo netstat -tulpn | grep :80
+```
+
+#### Mail Services Not Working
+
+```bash
+# Check if Stalwart is running
+docker ps | grep stalwart
+
+# Check Stalwart logs
+docker logs stalwart
+
+# Test SMTP connection
+telnet mail.example.com 25
+
+# Check DNS MX record
+dig -t MX example.com
+
+# Verify ports are open
+sudo netstat -tulpn | grep -E ':(25|587|465|143|993)'
+```
+
+### Managing Separate Domains Deployment
+
+```bash
+# Stop all services
+docker compose -f docker-compose.advanced-separate-domains.yml down
+
+# Update configuration
+docker compose -f docker-compose.advanced-separate-domains.yml up -d
+
+# View logs
+docker compose -f docker-compose.advanced-separate-domains.yml logs -f
+
+# Restart specific service
+docker compose -f docker-compose.advanced-separate-domains.yml restart caddy
+docker compose -f docker-compose.advanced-separate-domains.yml restart stalwart
+
+# Remove all data (WARNING: Deletes everything)
+docker compose -f docker-compose.advanced-separate-domains.yml down -v
+```
+
+### Customizing Caddy Configuration
+
+See `caddy/README.md` for advanced customization options:
+- Rate limiting
+- IP whitelisting
+- Basic authentication
+- Custom error pages
+- Additional security headers
+
+### Alternative: Using Nginx Instead of Caddy
+
+If you prefer Nginx over Caddy, see `SEPARATE_DOMAINS_SETUP.md` for complete Nginx configuration examples with:
+- Manual TLS certificate setup
+- Certbot integration
+- Rate limiting
+- Security headers
 
 ---
 
