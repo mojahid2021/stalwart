@@ -70,6 +70,14 @@ docker run -d --name stalwart \
   - Pros and cons analysis
   - Troubleshooting guide
 
+- **MULTI_SERVICE_SETUP.md** - Complete guide for PostgreSQL + Redis + MinIO setup ⭐ NEW
+  - Architecture diagrams and explanations
+  - Step-by-step configuration
+  - Troubleshooting common issues
+  - Production best practices
+  - Backup and restore procedures
+  - Scaling strategies
+
 - **docker-compose.yml** - Basic setup with RocksDB (single container)
 
 - **docker-compose.advanced.yml** - Full stack with PostgreSQL, Redis, and MinIO
@@ -77,6 +85,8 @@ docker run -d --name stalwart \
 - **config-advanced.toml** - Example configuration for advanced setup
 
 - **.env.template** - Template for environment variables
+
+- **.env.example** - Working example with sample passwords
 
 ## 🔑 Default Ports
 
@@ -101,10 +111,12 @@ docker run -d --name stalwart \
 
 ## 📖 Next Steps
 
-1. Read the complete [SETUP.md](./SETUP.md) guide
-2. Join the community on [Discord](https://discord.com/servers/stalwart-923615863037390889)
-3. Check the [official documentation](https://stalw.art/docs)
-4. Report issues on [GitHub](https://github.com/stalwartlabs/stalwart/issues)
+1. **For multi-service setup**: Read [MULTI_SERVICE_SETUP.md](./MULTI_SERVICE_SETUP.md) for PostgreSQL + Redis + MinIO deployment
+2. **For complete documentation**: Read [SETUP.md](./SETUP.md) guide
+3. **For scaling**: Check [SCALING_GUIDE.md](./SCALING_GUIDE.md)
+4. **Join the community**: [Discord](https://discord.com/servers/stalwart-923615863037390889)
+5. **Official docs**: [stalw.art/docs](https://stalw.art/docs)
+6. **Report issues**: [GitHub Issues](https://github.com/stalwartlabs/stalwart/issues)
 
 ## ⚠️ Security Note
 

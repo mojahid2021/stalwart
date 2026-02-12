@@ -746,6 +746,40 @@ docker-compose exec stalwart /bin/bash
 6. **Network isolation**: Use custom networks to isolate services
 7. **Volume backups**: Regularly backup named volumes
 
+### Multi-Service Setup Guide
+
+**📚 For a comprehensive guide on using PostgreSQL, Redis, and MinIO together**, see our detailed [Multi-Service Setup Guide](./MULTI_SERVICE_SETUP.md).
+
+This guide covers:
+- ✅ **Complete architecture** explanation with diagrams
+- ✅ **Step-by-step** setup instructions
+- ✅ **Configuration** examples and explanations
+- ✅ **Troubleshooting** common issues
+- ✅ **Production** deployment best practices
+- ✅ **Backup & restore** procedures
+- ✅ **Monitoring** and health checks
+- ✅ **Scaling** strategies
+
+The repository includes a ready-to-use configuration:
+- **docker-compose.advanced.yml**: Full setup with all three services
+- **config-advanced.toml**: Pre-configured to use PostgreSQL, Redis, and MinIO
+- **.env.example**: Sample environment variables with documentation
+
+**Quick start with multi-service setup:**
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit and set secure passwords
+nano .env
+
+# Start all services
+docker compose -f docker-compose.advanced.yml up -d --build
+
+# Access admin interface
+# http://localhost:8080 (login: admin / your ADMIN_SECRET)
+```
+
 ---
 
 ## Production Deployment Guide
