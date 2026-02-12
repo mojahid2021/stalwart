@@ -1,14 +1,20 @@
 # Advanced Stalwart Docker Compose Configuration
-# This setup includes PostgreSQL, Redis, and MinIO (S3-compatible storage)
-# for a production-ready deployment with external services
+# This setup includes PostgreSQL, Redis, MinIO, and nginx reverse proxy
+# for a production-ready deployment with separate admin and mail domains
 #
 # 📚 Complete Guide: See MULTI_SERVICE_SETUP.md for detailed documentation
 #
+# Architecture:
+# - Mail services: mail.yourdomain.com (with Stalwart's built-in ACME TLS)
+# - Admin panel: admin.yourdomain.com (via nginx reverse proxy)
+# - Internal services: PostgreSQL, Redis, MinIO (isolated network)
+#
 # Quick Start:
-# 1. Copy .env.example to .env and set secure passwords
-# 2. Run: docker compose -f docker-compose.advanced.yml up -d --build
-# 3. Access Stalwart Admin: http://localhost:8080
-# 4. Access MinIO Console: http://localhost:9001
+# 1. Copy .env.example to .env and set secure passwords + domains
+# 2. Configure nginx: Place your nginx config in nginx/conf.d/
+# 3. Run: docker compose -f docker-compose.advanced.yml up -d --build
+# 4. Access Admin: https://admin.yourdomain.com (via nginx)
+# 5. Mail TLS: Configure ACME in Stalwart admin dashboard
 
 services:
   # PostgreSQL Database
@@ -56,7 +62,7 @@ services:
       - stalwart-net
     
     healthcheck:
-      test: ["CMD", "redis-cli", "--askpass", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -84,10 +90,8 @@ services:
       - minio-data:/data
     
     ports:
-      # MinIO API port (internal use)
-      - "9000:9000"
-      # MinIO Console (web UI)
-      - "9001:9001"
+      # MinIO Console (web UI) - localhost only for security
+      - "127.0.0.1:9001:9001"
     
     networks:
       - stalwart-net
@@ -131,7 +135,7 @@ services:
       dockerfile: Dockerfile
     image: stalwart:local
     container_name: stalwart
-    hostname: mail.example.com
+    hostname: ${MAIL_DOMAIN:-mail.example.com}
     restart: unless-stopped
     
     depends_on:
@@ -160,16 +164,16 @@ services:
       
       # Additional services
       - "4190:4190"  # ManageSieve
-      - "8080:8080"  # HTTP Admin Interface
-      - "443:443"    # HTTPS Admin Interface
+      
+      # Admin Interface - localhost only (accessed via nginx reverse proxy)
+      - "127.0.0.1:8080:8080"  # HTTP Admin Interface (internal only)
     
     volumes:
       # Persistent configuration and logs
       - ./stalwart-data:/opt/stalwart
       
-      # Optional: Mount custom configuration file
-      # Uncomment the line below and create config-advanced.toml
-      # - ./config-advanced.toml:/opt/stalwart/etc/config.toml:ro
+      # Mount custom configuration file for advanced setup with separate domains
+      - ./config-advanced.toml:/opt/stalwart/etc/config.toml:ro
     
     environment:
       # Admin credentials
@@ -177,6 +181,10 @@ services:
       
       # Stalwart paths
       - STALWART_PATH=/opt/stalwart
+      
+      # Domain configuration
+      - MAIL_DOMAIN=${MAIL_DOMAIN:-mail.example.com}
+      - ADMIN_DOMAIN=${ADMIN_DOMAIN:-admin.example.com}
       
       # PostgreSQL connection
       - DB_HOST=postgres
@@ -226,6 +234,45 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Nginx Reverse Proxy (Admin Panel)
+  nginx:
+    image: nginx:alpine
+    container_name: stalwart-nginx
+    restart: unless-stopped
+    
+    depends_on:
+      stalwart:
+        condition: service_healthy
+    
+    ports:
+      # HTTP and HTTPS for admin domain
+      - "80:80"      # HTTP (for ACME challenge and redirect)
+      - "443:443"    # HTTPS (admin panel)
+    
+    volumes:
+      # Nginx configuration
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # TLS certificates (managed manually or via certbot)
+      - ./nginx/certs:/etc/nginx/certs:ro
+      # Nginx logs
+      - nginx-logs:/var/log/nginx
+    
+    networks:
+      - stalwart-net
+    
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   stalwart-net:
     driver: bridge
@@ -237,45 +284,97 @@ volumes:
     driver: local
   minio-data:
     driver: local
+  nginx-logs:
+    driver: local
 
-# To use this file:
-# 
-# 1. Create a .env file with the following content:
-#    Copy .env.example to .env and customize with secure passwords:
+# ==============================================================================
+# USAGE INSTRUCTIONS
+# ==============================================================================
+#
+# 1. SETUP ENVIRONMENT FILE
+#    Copy .env.example to .env and customize:
 #    cp .env.example .env
-#    nano .env  # Edit with your secure passwords
+#    nano .env
 #
 #    Required variables:
 #    - ADMIN_SECRET=your-secure-admin-password
 #    - DB_PASSWORD=your-secure-db-password
 #    - REDIS_PASSWORD=your-secure-redis-password
 #    - MINIO_PASSWORD=your-secure-minio-password
+#    - MAIL_DOMAIN=mail.yourdomain.com
+#    - ADMIN_DOMAIN=admin.yourdomain.com
 #    - TZ=UTC
 #
-# 2. Build and start all services:
+# 2. CONFIGURE NGINX
+#    Create nginx configuration:
+#    mkdir -p nginx/conf.d nginx/certs
+#    
+#    Create nginx/nginx.conf (basic config)
+#    Create nginx/conf.d/admin.conf (admin domain config)
+#    See MULTI_SERVICE_SETUP.md for nginx configuration examples
+#
+# 3. CONFIGURE DNS
+#    Point both domains to your server IP:
+#    - mail.yourdomain.com    A    YOUR_SERVER_IP
+#    - admin.yourdomain.com   A    YOUR_SERVER_IP
+#    - yourdomain.com         MX   mail.yourdomain.com
+#
+# 4. SETUP TLS CERTIFICATES
+#    For admin.yourdomain.com (nginx):
+#    - Use certbot: certbot certonly --nginx -d admin.yourdomain.com
+#    - Or place manual certs in nginx/certs/
+#    
+#    For mail.yourdomain.com (Stalwart built-in ACME):
+#    - Configure in Stalwart admin dashboard after deployment
+#    - Settings → TLS → ACME → Enable Let's Encrypt
+#
+# 5. BUILD AND START
 #    docker compose -f docker-compose.advanced.yml up -d --build
 #
-# 3. Monitor logs:
+# 6. CONFIGURE STALWART ACME (for mail domain TLS)
+#    - Access admin panel: https://admin.yourdomain.com
+#    - Navigate to Settings → TLS
+#    - Enable ACME for mail.yourdomain.com
+#    - Stalwart will automatically obtain and renew certificates
+#
+# 7. MONITOR LOGS
 #    docker compose -f docker-compose.advanced.yml logs -f
 #
-# 4. Access services:
-#    - Stalwart Admin: http://localhost:8080 (admin / your-admin-password)
-#    - MinIO Console: http://localhost:9001 (minioadmin / your-minio-password)
+# 8. ACCESS SERVICES
+#    - Admin Panel: https://admin.yourdomain.com (via nginx)
+#    - Mail Server: mail.yourdomain.com (for email clients, with ACME TLS)
+#    - MinIO Console: http://localhost:9001 (local only)
 #
-# 5. Stop services:
+# 9. STOP SERVICES
 #    docker compose -f docker-compose.advanced.yml down
 #
-# 6. Remove all data (WARNING: This deletes everything):
-#    docker compose -f docker-compose.advanced.yml down -v
+# 10. REMOVE ALL DATA (WARNING: Deletes everything)
+#     docker compose -f docker-compose.advanced.yml down -v
 #
-# Note: For production use, you'll need to create a custom configuration file
-# (config-advanced.toml) that uses PostgreSQL, Redis, and S3 storage backends.
-# 
-# 📚 Complete Guide: See MULTI_SERVICE_SETUP.md for:
-#    - Detailed configuration instructions
+# ==============================================================================
+# SECURITY FEATURES
+# ==============================================================================
+#
+# ✓ Admin panel bound to localhost, accessed via nginx reverse proxy
+# ✓ Mail domain uses Stalwart's built-in ACME for automatic TLS
+# ✓ Admin domain uses nginx with manual TLS or certbot
+# ✓ Internal services (PostgreSQL, Redis, MinIO) on private network
+# ✓ MinIO console restricted to localhost
+# ✓ Separate domains for mail and admin (professional setup)
+#
+# ==============================================================================
+# COMPLETE DOCUMENTATION
+# ==============================================================================
+#
+# 📚 See MULTI_SERVICE_SETUP.md for:
+#    - Complete nginx configuration examples
+#    - Detailed setup instructions
+#    - Stalwart ACME configuration guide
 #    - Troubleshooting common issues
 #    - Production deployment best practices
 #    - Backup and restore procedures
 #    - Scaling strategies
 #    - Security hardening
 #    - Monitoring and health checks
+#
+# ==============================================================================
