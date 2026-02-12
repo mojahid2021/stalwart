@@ -9,7 +9,7 @@
 #   ./validate-setup.sh
 # ==============================================
 
-set -e
+# Note: We don't use 'set -e' so users can see all validation issues at once
 
 echo "🔍 Stalwart Multi-Service Setup Validation"
 echo "=========================================="
@@ -73,11 +73,30 @@ if [ -f ".env" ]; then
     
     # Check required variables
     REQUIRED_VARS=("ADMIN_SECRET" "DB_PASSWORD" "REDIS_PASSWORD" "MINIO_PASSWORD")
+    WEAK_PATTERNS=("REPLACE_WITH" "CHANGE_ME" "ChangeMeToStrongPassword" "TestPassword" "password123" "admin123" "secret123")
+    
     for var in "${REQUIRED_VARS[@]}"; do
         if grep -q "^${var}=" .env; then
             VALUE=$(grep "^${var}=" .env | cut -d'=' -f2)
-            if [[ "$VALUE" == *"CHANGE_ME"* ]] || [[ "$VALUE" == "" ]]; then
-                error "$var is not set or uses a placeholder value"
+            
+            # Check if empty
+            if [[ "$VALUE" == "" ]]; then
+                error "$var is empty"
+                continue
+            fi
+            
+            # Check for weak patterns (case-insensitive)
+            IS_WEAK=false
+            for pattern in "${WEAK_PATTERNS[@]}"; do
+                if echo "$VALUE" | grep -qi "$pattern"; then
+                    IS_WEAK=true
+                    break
+                fi
+            done
+            
+            if [ "$IS_WEAK" = true ]; then
+                error "$var uses a weak or placeholder password. Please set a strong password."
+                info "Generate with: openssl rand -base64 32"
             else
                 success "$var is set"
             fi
