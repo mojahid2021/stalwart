@@ -62,13 +62,9 @@
         -Server
     }
     
-    # Access logging
+    # Access logging (using stdout for Docker)
     log {
-        output file /var/log/caddy/admin-access.log {
-            roll_size 10mb
-            roll_keep 5
-            roll_keep_for 720h
-        }
+        output stdout
         format json
         level INFO
     }
