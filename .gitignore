@@ -8,3 +8,5 @@ _ignore
 .DS_Store
 .env
 stalwart-data/
+caddy/data/
+caddy/config/

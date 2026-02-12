@@ -133,6 +133,7 @@ Key features:
 **📚 New to Stalwart?** Check out our comprehensive setup guides:
 - **[Quick Start Guide](./QUICKSTART.md)** - Get up and running in 5 minutes
 - **[Multi-Service Setup](./MULTI_SERVICE_SETUP.md)** - PostgreSQL + Redis + MinIO deployment guide ⭐ NEW
+- **[Advanced Separate Domains](./ADVANCED_SEPARATE_DOMAINS_GUIDE.md)** - Production-ready setup with isolated admin domain ⭐ NEW
 - **[Production Quick Start](./PRODUCTION_QUICK_START.md)** - Deploy to production with Docker in 5 minutes ⭐
 - **[Separate Domains Setup](./SEPARATE_DOMAINS_SETUP.md)** - Configure admin.domain.com and mail.domain.com ⭐
 - **[Scaling Guide](./SCALING_GUIDE.md)** - Horizontal and vertical scaling strategies ⭐
