@@ -42,15 +42,11 @@ tls.implicit = true
 bind = ["0.0.0.0:4190"]
 protocol = "managesieve"
 
-[server.listener."https"]
-bind = ["0.0.0.0:443"]
-protocol = "http"
-tls.implicit = true
-
 [server.listener."http"]
-bind = ["0.0.0.0:8080"]
+bind = ["127.0.0.1:8080"]
 protocol = "http"
-tls.implicit = false
+# Note: Admin bound to localhost only, accessed via nginx reverse proxy
+# nginx will forward admin.yourdomain.com to this endpoint
 
 # ==============================================
 # Storage Configuration
@@ -147,15 +143,23 @@ enable = true
 # TLS Configuration
 # ==============================================
 
-# For production, configure proper TLS certificates
-# [server.tls]
-# certificate = "/path/to/cert.pem"
-# private-key = "/path/to/key.pem"
+# ==============================================
+# TLS Configuration
+# ==============================================
 
-# Or use ACME (Let's Encrypt) for automatic certificates
-# [acme]
+# For mail domain TLS, use Stalwart's built-in ACME (configured in admin dashboard)
+# For admin domain TLS, use nginx with certbot or manual certificates
+
+# ACME Configuration (for mail.yourdomain.com)
+# Enable this in the Stalwart admin dashboard:
+# Settings → TLS → ACME → Enable Let's Encrypt
+# This will automatically obtain and renew certificates for mail services
+# 
+# Example ACME configuration (configure via admin panel):
+# [acme."letsencrypt"]
 # directory = "https://acme-v02.api.letsencrypt.org/directory"
-# contact = ["mailto:admin@example.com"]
+# contact = ["mailto:admin@yourdomain.com"]
+# domains = ["mail.yourdomain.com"]
 
 # ==============================================
 # Spam Filter Configuration (Optional)
@@ -200,16 +204,24 @@ retry = ["2m", "5m", "10m", "30m", "1h", "2h", "6h", "12h"]
 # Additional Notes
 # ==============================================
 
-# This configuration uses environment variables for sensitive data
-# Make sure to set these in your .env file:
-# - ADMIN_SECRET
-# - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-# - REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
-# - S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY
+# This configuration is for separate domains setup:
+# - Mail services: mail.yourdomain.com (with Stalwart's built-in ACME for TLS)
+# - Admin panel: admin.yourdomain.com (via nginx reverse proxy with manual TLS)
+#
+# Admin panel is bound to localhost:8080 and accessed via nginx on admin.yourdomain.com
+# Mail domain TLS is handled by Stalwart's ACME (configure in admin dashboard)
+#
+# Environment variables required:
+# - ADMIN_SECRET: Admin password
+# - MAIL_DOMAIN: Mail server domain (e.g., mail.yourdomain.com)
+# - ADMIN_DOMAIN: Admin panel domain (e.g., admin.yourdomain.com)
+# - DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD: PostgreSQL connection
+# - REDIS_HOST, REDIS_PORT, REDIS_PASSWORD: Redis connection
+# - S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY, S3_SECRET_KEY: MinIO/S3
 
-# For a complete list of configuration options, see:
+# For complete setup instructions, see:
+# - MULTI_SERVICE_SETUP.md (comprehensive guide)
+# - nginx/README.md (nginx configuration guide)
+
+# Configuration reference:
 # https://stalw.art/docs/configuration
-
-# Environment variable syntax:
-# %{env:VARIABLE_NAME}% - Required (fails if not set)
-# %{env:VARIABLE_NAME:default}% - Optional with default value

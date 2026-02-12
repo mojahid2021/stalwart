@@ -8,3 +8,5 @@ _ignore
 .DS_Store
 .env
 stalwart-data/
+nginx/certs/
+nginx/webroot/
