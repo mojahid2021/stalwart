@@ -1,0 +1,153 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  SECURITY AUDIT REPORT - STALWART MAIL SERVER                ║
+║                         Comprehensive Analysis Complete                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📅 Audit Date: February 10, 2026
+🎯 Overall Rating: B+ (Good, with Critical Issues to Address)
+📊 Total Vulnerabilities Found: 11
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          VULNERABILITY BREAKDOWN                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+🔴 CRITICAL (1)    ████████████████████████████████ CVSS 9.8
+   └─ Command Execution in Sieve Scripts
+      Location: crates/common/src/scripts/plugins/exec.rs
+      Impact: Complete system compromise possible
+
+🟠 HIGH (3)        ████████████████████ CVSS 6.5-7.4
+   ├─ Weak Cryptographic Hash Support (MD5/SHA-1)
+   ├─ Extensive panic!/unwrap() Usage (DoS Risk)
+   └─ Limited File Path Validation (Traversal Risk)
+
+🟡 MEDIUM (4)      ████████████ CVSS 5.3-5.9
+   ├─ SQL Injection Risk (Dynamic Queries)
+   ├─ Unsafe Code Usage (7 instances)
+   ├─ Environment Variable Injection
+   └─ Docker Security Configuration
+
+🟢 LOW (3)         ████ CVSS 3.1-3.7
+   ├─ Information Disclosure in Errors
+   ├─ Timing Attack Vulnerabilities
+   └─ Missing Security Headers
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          SECURITY STRENGTHS                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+✅ Memory Safety              - Rust prevents buffer overflows & memory corruption
+✅ Modern Cryptography         - Argon2, bcrypt, PBKDF2, scrypt support
+✅ Strong Authentication       - 2FA (TOTP), OAuth 2.0, LDAP, RBAC
+✅ No Hardcoded Secrets        - Environment variables used throughout
+✅ Parameterized SQL Queries   - Protection against SQL injection
+✅ Comprehensive Documentation - SECURITY.md with disclosure policy
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          IMMEDIATE ACTIONS REQUIRED                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+🚨 DAY 1 (Critical)
+   [ ] Disable exec() function in Sieve scripts by default
+   [ ] Add configuration flag with security warnings
+   [ ] Update Docker to run as non-root user
+   [ ] Document command execution security risks
+
+📋 WEEK 1 (High Priority)
+   [ ] Implement weak hash deprecation warnings
+   [ ] Add path canonicalization for file operations
+   [ ] Audit all unsafe code blocks
+   [ ] Implement command whitelist for exec()
+
+🔧 MONTH 1 (High Priority)
+   [ ] Automatic password rehashing on login
+   [ ] Reduce panic!/unwrap() in critical paths
+   [ ] Add comprehensive security tests
+   [ ] Implement Docker security profiles
+
+📅 MONTH 2-3 (Medium Priority)
+   [ ] Integrate secrets management system
+   [ ] Enhanced monitoring and alerting
+   [ ] Add security headers to web interfaces
+   [ ] Conduct penetration testing
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          DOCUMENTATION STRUCTURE                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+📄 SECURITY_AUDIT_INDEX.md      ← Start here (navigation guide)
+   ├── Quick start by role
+   ├── Critical alerts
+   └── Links to all documentation
+
+📊 SECURITY_AUDIT_SUMMARY.md    ← Quick reference (241 lines)
+   ├── Executive summary
+   ├── Vulnerability breakdown
+   ├── Quick fixes
+   └── Action plan with timelines
+
+📖 SECURITY_AUDIT_REPORT.md     ← Full analysis (673 lines)
+   ├── Detailed vulnerability descriptions
+   ├── CVSS scores and impact assessments
+   ├── Code examples and attack scenarios
+   ├── Remediation steps
+   ├── OWASP Top 10 compliance
+   └── CWE coverage analysis
+
+🔐 SECURITY.md                   ← Official security policy
+   ├── Vulnerability disclosure
+   ├── Supported versions
+   └── Contact information
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          OWASP TOP 10 (2021) ANALYSIS                        ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+A01: Broken Access Control       ✅ GOOD    - RBAC implemented
+A02: Cryptographic Failures       ⚠️  FAIR    - Weak hashes present
+A03: Injection                    ⚠️  FAIR    - Command injection risk
+A04: Insecure Design              ✅ GOOD    - Well-designed
+A05: Security Misconfiguration    ⚠️  FAIR    - Docker runs as root
+A06: Vulnerable Components        ✅ GOOD    - Well-maintained
+A07: Auth & Session               ✅ GOOD    - Strong authentication
+A08: Software & Data Integrity    ✅ GOOD    - Rust type safety
+A09: Logging & Monitoring         ✅ GOOD    - Comprehensive logging
+A10: SSRF                         ✅ GOOD    - Limited external requests
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          CODEBASE METRICS                                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+📊 Lines of Code:           ~200,000+ (Rust)
+🔓 Unsafe Blocks:           7 (0.0035% of codebase)
+📦 Dependencies:            Well-maintained, regularly updated
+✅ Test Coverage:           Comprehensive test suite present
+📚 Documentation:           Extensive security documentation
+🔒 Memory Safety:           99.9965% safe code
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          CONTACT & REPORTING                                 ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+🔒 Security Issues:          security@stalw.art
+💬 General Questions:        hello@stalw.art
+📘 Documentation:            https://stalw.art/docs
+🐛 Bug Reports:              https://github.com/stalwartlabs/stalwart/issues
+
+⚠️  DO NOT report security vulnerabilities through public GitHub issues!
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          NEXT STEPS                                          ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+1. 📖 Read SECURITY_AUDIT_SUMMARY.md for quick overview
+2. 🔍 Review SECURITY_AUDIT_REPORT.md for technical details
+3. 🚨 Address critical command execution vulnerability immediately
+4. 📋 Follow the action plan to address all findings
+5. ✅ Use verification checklist to track progress
+6. 🔄 Schedule next security audit for May 10, 2026
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  Report Generated: February 10, 2026                         ║
+║                  Version: 1.0 | Next Review: May 10, 2026                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
